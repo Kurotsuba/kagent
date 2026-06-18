@@ -30,10 +30,11 @@ impl SkillRegistry {
 
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            if !path.is_dir() {
                 continue;
             }
-            let content = match std::fs::read_to_string(&path) {
+            let skill_file = path.join("SKILL.md");
+            let content = match std::fs::read_to_string(&skill_file) {
                 Ok(c) => c,
                 Err(_) => continue,
             };
