@@ -11,6 +11,7 @@ use clap::Parser;
 use config::Config;
 use llm::{LLMClient, Provider};
 use tools::ToolRegistry;
+use tools::browser::{FetchUrl, FetchUrlJs};
 use tools::filesystem::{ListFiles, ReadFile, WriteFile};
 use tools::search::SearchFiles;
 use tools::shell::RunShell;
@@ -52,6 +53,8 @@ async fn main() -> anyhow::Result<()> {
     registry.register(ListFiles);
     registry.register(RunShell);
     registry.register(SearchFiles);
+    registry.register(FetchUrl);
+    registry.register(FetchUrlJs);
 
     let skills = Arc::new(SkillRegistry::load_dir(std::path::Path::new("skills")));
     registry.register(UseSkill(Arc::clone(&skills)));
