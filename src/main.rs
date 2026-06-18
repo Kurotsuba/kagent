@@ -1,7 +1,10 @@
 mod agent;
 mod config;
 mod llm;
+mod skills;
 mod tools;
+
+use std::sync::Arc;
 
 use agent::Agent;
 use clap::Parser;
@@ -11,6 +14,9 @@ use tools::ToolRegistry;
 use tools::filesystem::{ListFiles, ReadFile, WriteFile};
 use tools::search::SearchFiles;
 use tools::shell::RunShell;
+
+use crate::skills::SkillRegistry;
+use crate::tools::skill::UseSkill;
 
 #[derive(Parser)]
 struct Cli {
@@ -33,7 +39,12 @@ async fn main() -> anyhow::Result<()> {
         cfg.base_url = u;
     }
 
-    let llm = LLMClient::new(cfg.api_key, cfg.base_url, cfg.model, Provider::from_str(&cfg.provider));
+    let llm = LLMClient::new(
+        cfg.api_key,
+        cfg.base_url,
+        cfg.model,
+        Provider::from_str(&cfg.provider),
+    );
 
     let mut registry = ToolRegistry::new();
     registry.register(ReadFile);
@@ -42,7 +53,27 @@ async fn main() -> anyhow::Result<()> {
     registry.register(RunShell);
     registry.register(SearchFiles);
 
-    let mut agent = Agent::new(llm, registry, "You are a helpful coding agent.");
+    let skills = Arc::new(SkillRegistry::load_dir(std::path::Path::new("skills")));
+    registry.register(UseSkill(Arc::clone(&skills)));
+
+    let skill_list = {
+        let list = skills.list();
+        if list.is_empty() {
+            String::new()
+        } else {
+            let entries: Vec<String> = list
+                .iter()
+                .map(|s| format!("{} ({})", s.name, s.description))
+                .collect();
+            format!(
+                "\nAvailable skills: {}.\nUse the use_skill tool to invoke one.",
+                entries.join(", ")
+            )
+        }
+    };
+
+    let system = format!("You are a helpful coding agent.{skill_list}");
+    let mut agent = Agent::new(llm, registry, system);
 
     if let Some(task) = cli.task {
         let answer = agent.run(&task).await?;
@@ -60,7 +91,17 @@ async fn main() -> anyhow::Result<()> {
                     continue;
                 }
                 rl.add_history_entry(&line)?;
-                match agent.run(&line).await {
+                let prompt = if line.starts_with('/') {
+                    let rest = &line[1..];
+                    let (name, args) = rest.split_once(' ').unwrap_or((rest, ""));
+                    match skills.render(name, args) {
+                        Some(p) => p,
+                        None => { eprintln!("unknown skill: {name}"); continue; }
+                    }
+                } else {
+                    line.clone()
+                };
+                match agent.run(&prompt).await {
                     Ok(answer) => println!("{answer}"),
                     Err(e) => eprintln!("error: {e}"),
                 }

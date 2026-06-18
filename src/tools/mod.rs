@@ -1,13 +1,13 @@
 pub mod filesystem;
 pub mod search;
 pub mod shell;
+pub mod skill;
 
 use async_trait::async_trait;
 use serde_json::Value;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-
 
 #[async_trait]
 pub trait Tool: Send + Sync {
@@ -31,7 +31,6 @@ impl ToolRegistry {
     pub fn register(&mut self, tool: impl Tool + 'static) {
         self.tools.insert(tool.name().to_string(), Arc::new(tool));
     }
-
 
     pub fn to_anthropic_tools(&self) -> Vec<serde_json::Value> {
         self.tools
